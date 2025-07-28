@@ -1,12 +1,10 @@
 package com.bhavesh.learn.cachepurge.model;
 
-import com.bhavesh.learn.cachepurge.annotation.TrackLatency;
 import com.bhavesh.learn.cachepurge.domain.DoublyLinkedList;
 import com.bhavesh.learn.cachepurge.domain.Node;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 
 public class LFUCache<K, V> implements Cache<K, V> {
     private Map<Integer, DoublyLinkedList<K, V>> freqMap;
