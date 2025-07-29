@@ -22,9 +22,19 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Set up image tags
+        id: vars
+        run: |
+          SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
+          DATE_TAG=$(date +'%Y%m%d')
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "date_tag=$DATE_TAG" >> $GITHUB_OUTPUT
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: bhaveshlohana/cache-forge-simulator:latest
+          tags: |
+            bhaveshlohana/cache-forge-simulator:latest
+            bhaveshlohana/cache-forge-simulator:${{ steps.vars.outputs.date_tag }}-${{ steps.vars.outputs.short_sha }}
