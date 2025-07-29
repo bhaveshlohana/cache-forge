@@ -9,7 +9,7 @@
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
 	<groupId>com.bhavesh.learn</groupId>
-	<artifactId>cacheforge</artifactId>
+	<artifactId>cache-forge</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>cache-forge</name>
 	<description>Demo project for Spring Boot</description>

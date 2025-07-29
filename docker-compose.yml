@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Your Spring Boot Application Service
+  app:
+    build:
+      context: . # Build from the current directory (where Dockerfile is)
+      dockerfile: Dockerfile
+    container_name: cache-forge-app
+    ports:
+      - "8080:8080" # Map host port 8080 to container port 8080
+    networks:
+      - cache-net # Connect to our custom network
+    depends_on:
+      - prometheus # Start Prometheus before the app (for metrics scraping)
+    healthcheck: # Optional: Health check to ensure app is ready before Prometheus scrapes
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"] # Checks if actuator health is up
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped # Always restart unless explicitly stopped
+
+  # Prometheus Monitoring Service
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cache-forge-prometheus
+    ports:
+      - "9090:9090" # Prometheus UI
+    volumes:
+      - ./src/main/resources/prometheus.yml:/etc/prometheus/prometheus.yml # Mount our config
+      - prometheus_data:/prometheus # Persistent storage for Prometheus data
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml' # Specify the config file
+      - '--storage.tsdb.path=/prometheus' # Specify the data storage path
+    networks:
+      - cache-net
+    restart: unless-stopped
+
+  # Grafana Visualization Service
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cache-forge-grafana
+    ports:
+      - "3000:3000" # Grafana UI
+    volumes:
+      - grafana_data:/var/lib/grafana # Persistent storage for Grafana data
+    networks:
+      - cache-net
+    depends_on:
+      - prometheus # Ensure Prometheus is running before Grafana starts
+    restart: unless-stopped
+
+# Define custom network for services to communicate
+networks:
+  cache-net:
+    driver: bridge
+
+# Define named volumes for persistent data
+volumes:
+  prometheus_data: # Data volume for Prometheus
+  grafana_data:    # Data volume for Grafana
