@@ -1,0 +1,17 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        cache.simulation.latency: true
+      percentiles:
+        cache.simulation.latency: 0.5, 0.95, 0.99
+  endpoint:
+    prometheus:
+      enabled: true

@@ -1,9 +1,9 @@
 
-# CachePurge: Cache Simulation and Benchmarking Service
+# CacheForge: Cache Simulation and Benchmarking Service
 
 ## Project Overview
 
-CachePurge is a Spring Boot application designed to simulate and benchmark various cache replacement algorithms under different workload patterns. It provides a RESTful API to trigger simulations, compare cache performance metrics (like hit rate, latency, and eviction count), and observe cache behavior.
+CacheForge is a Spring Boot application designed to simulate and benchmark various cache replacement algorithms under different workload patterns. It provides a RESTful API to trigger simulations, compare cache performance metrics (like hit rate, latency, and eviction count), and observe cache behavior.
 
 This project is an excellent demonstration of:
 * Implementing fundamental caching algorithms.
@@ -19,7 +19,7 @@ This project is an excellent demonstration of:
     * **MRU (Most Recently Used):** Evicts the most recently accessed item (less common, but useful for specific scenarios).
 * **Time-To-Live (TTL) Caching:**
     * Implemented as a `TTLCacheDecorator` that wraps any base cache.
-    * Automatically purges expired keys in the background using a scheduled task.
+    * Automatically Forges expired keys in the background using a scheduled task.
 * **Diverse Workload Generators:**
     * **Random:** Uniformly random key access.
     * **Sequential:** Keys accessed in a sequential order.
@@ -34,12 +34,12 @@ This project is an excellent demonstration of:
 
 ## Core Components & Architecture
 
-* **`com.bhavesh.learn.cachepurge.model`**: Contains the `Cache` interface and its concrete implementations (LRU, LFU, FIFO, MRU).
-* **`com.bhavesh.learn.cachepurge.domain`**: Houses common data structures (`Node`, `DoublyLinkedList`), domain models (`CacheRequest`, `SimulationConfig`, `SimulationRequest`), and the `TTLCacheDecorator`.
-* **`com.bhavesh.learn.cachepurge.generator`**: Defines the `WorkLoadGenerator` interface and its `impl` subpackage contains various workload generation strategies.
-* **`com.bhavesh.learn.cachepurge.service.SimulatorService`**: The main service orchestrating simulations. It dynamically selects cache types and workload generators, runs the simulation, and collects metrics.
-* **`com.bhavesh.learn.cachepurge.controller.CacheBenchmarkController`**: Exposes the simulation functionality as REST endpoints.
-* **`com.bhavesh.learn.cachepurge.config.CacheConfig`**: Defines the cache implementations as prototype-scoped Spring Beans, allowing Spring to manage their lifecycle.
+* **`com.bhavesh.learn.cacheforge.model`**: Contains the `Cache` interface and its concrete implementations (LRU, LFU, FIFO, MRU).
+* **`com.bhavesh.learn.cacheforge.domain`**: Houses common data structures (`Node`, `DoublyLinkedList`), domain models (`CacheRequest`, `SimulationConfig`, `SimulationRequest`), and the `TTLCacheDecorator`.
+* **`com.bhavesh.learn.cacheforge.generator`**: Defines the `WorkLoadGenerator` interface and its `impl` subpackage contains various workload generation strategies.
+* **`com.bhavesh.learn.cacheforge.service.SimulatorService`**: The main service orchestrating simulations. It dynamically selects cache types and workload generators, runs the simulation, and collects metrics.
+* **`com.bhavesh.learn.cacheforge.controller.CacheBenchmarkController`**: Exposes the simulation functionality as REST endpoints.
+* **`com.bhavesh.learn.cacheforge.config.CacheConfig`**: Defines the cache implementations as prototype-scoped Spring Beans, allowing Spring to manage their lifecycle.
 
 ## Technologies Used
 
@@ -60,7 +60,7 @@ This project is an excellent demonstration of:
 
 ```bash
 git clone <your-repo-url>
-cd cachepurge
+cd cacheForge
 ````
 
 ### Build the Project
@@ -74,7 +74,7 @@ mvn clean install
 ```bash
 mvn spring-boot:run
 # Or, if you've built the JAR:
-# java -jar target/cachepurge-0.0.1-SNAPSHOT.jar
+# java -jar target/cacheForge-0.0.1-SNAPSHOT.jar
 ```
 
 The application will start on `http://localhost:8080/` by default.
@@ -170,6 +170,6 @@ Runs simulations for all implemented workload patterns for a single specified ca
 The `application.properties` file (`src/main/resources/application.properties`) allows you to configure global application settings, including TTL:
 
 ```properties
-spring.application.name=cache-purge
+spring.application.name=cache-Forge
 server.port=8080
 ```
