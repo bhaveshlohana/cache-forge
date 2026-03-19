@@ -4,6 +4,8 @@ import com.bhavesh.learn.cacheforge.domain.*;
 import com.bhavesh.learn.cacheforge.domain.enums.CacheStrategy;
 import com.bhavesh.learn.cacheforge.domain.enums.OperationType;
 import com.bhavesh.learn.cacheforge.domain.enums.WorkloadPattern;
+import com.bhavesh.learn.cacheforge.exception.SimulationException;
+import com.bhavesh.learn.cacheforge.factory.CacheFactory;
 import com.bhavesh.learn.cacheforge.model.*;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -12,7 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.aop.support.AopUtils;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import java.util.*;
@@ -29,6 +30,9 @@ public class SimulatorService {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    CacheFactory cacheFactory;
     
     // configurable progress publish steps (percent and count)
     @Value("${simulation.progress.percent-step:5}")
@@ -69,27 +73,12 @@ public class SimulatorService {
         return allResults;
     }
 
+    /**
+     * Creates a fully-decorated cache from the given config.
+     * Delegates to {@link CacheFactory} for instantiation.
+     */
     public Cache<Integer, String> getCacheBasedOnStrategy(SimulationConfig simulationConfig) {
-        long cacheSize = simulationConfig.cacheSize();
-
-        // Step 1: Create base cache from strategy
-        Cache<Integer, String> cache = switch (simulationConfig.strategy()) {
-            case LFU -> new LFUCache<>(cacheSize);
-            case LRU -> new LRUCache<>(cacheSize);
-            case FIFO -> new FIFOCache<>(cacheSize);
-            case MRU -> new MRUCache<>(cacheSize);
-            case RANDOM -> new RandomCache<>(cacheSize);
-            case ARC -> new ARCCache<>(cacheSize);
-            case CLOCK -> new ClockCache<>(cacheSize);
-        };
-
-        // Step 2: Optionally wrap with TTL decorator
-        if (simulationConfig.ttlEnabled()) {
-            cache = new TTLCacheDecorator<>(cache, simulationConfig.ttlDuration(), simulationConfig.ttlUnit());
-        }
-
-        // Step 3: Always wrap with latency tracking
-        return new LatencyTrackingCache<>(cache);
+        return cacheFactory.createCache(simulationConfig);
     }
 
 
@@ -302,7 +291,7 @@ public class SimulatorService {
                             future.get();
                         } catch (InterruptedException | ExecutionException e) {
                             Thread.currentThread().interrupt();
-                            throw new RuntimeException("Concurrent simulation failed", e);
+                            throw new SimulationException("Concurrent simulation failed", e);
                         }
                     }
 

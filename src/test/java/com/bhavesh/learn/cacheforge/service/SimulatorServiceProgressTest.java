@@ -7,6 +7,7 @@ import com.bhavesh.learn.cacheforge.domain.SimulationConfig;
 import com.bhavesh.learn.cacheforge.domain.enums.CacheStrategy;
 import com.bhavesh.learn.cacheforge.domain.enums.OperationType;
 import com.bhavesh.learn.cacheforge.domain.enums.WorkloadPattern;
+import com.bhavesh.learn.cacheforge.factory.CacheFactory;
 import com.bhavesh.learn.cacheforge.model.Cache;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,6 +45,9 @@ class SimulatorServiceProgressTest {
         Field mrField = SimulatorService.class.getDeclaredField("meterRegistry");
         mrField.setAccessible(true);
         mrField.set(service, new SimpleMeterRegistry());
+
+        // inject CacheFactory
+        service.cacheFactory = new CacheFactory();
 
         // create a small simulation config and requests
         SimulationConfig config = new SimulationConfig(CacheStrategy.LRU, 3, WorkloadPattern.random, 10, 5, 0.5);

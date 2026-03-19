@@ -4,6 +4,8 @@ import com.bhavesh.learn.cacheforge.domain.*;
 import com.bhavesh.learn.cacheforge.domain.enums.CacheStrategy;
 import com.bhavesh.learn.cacheforge.domain.enums.OperationType;
 import com.bhavesh.learn.cacheforge.domain.enums.WorkloadPattern;
+import com.bhavesh.learn.cacheforge.factory.CacheFactory;
+import com.bhavesh.learn.cacheforge.factory.WorkloadGeneratorFactory;
 import com.bhavesh.learn.cacheforge.model.*;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -29,9 +31,14 @@ class SimulatorServiceTest {
         workloadGeneratorService = new WorkloadGeneratorService();
         meterRegistry = new SimpleMeterRegistry();
 
-        // Inject dependencies manually
+        // Inject factory dependencies
+        CacheFactory cacheFactory = new CacheFactory();
+        WorkloadGeneratorFactory generatorFactory = new WorkloadGeneratorFactory();
+
+        simulatorService.cacheFactory = cacheFactory;
         simulatorService.workloadGeneratorService = workloadGeneratorService;
         simulatorService.meterRegistry = meterRegistry;
+        workloadGeneratorService.generatorFactory = generatorFactory;
     }
 
     // --- getCacheBasedOnStrategy ---

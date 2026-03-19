@@ -4,6 +4,7 @@ import com.bhavesh.learn.cacheforge.domain.CacheRequest;
 import com.bhavesh.learn.cacheforge.domain.SimulationConfig;
 import com.bhavesh.learn.cacheforge.domain.enums.CacheStrategy;
 import com.bhavesh.learn.cacheforge.domain.enums.WorkloadPattern;
+import com.bhavesh.learn.cacheforge.factory.WorkloadGeneratorFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -20,6 +21,7 @@ class WorkloadGeneratorServiceTest {
     @BeforeEach
     void setUp() {
         service = new WorkloadGeneratorService();
+        service.generatorFactory = new WorkloadGeneratorFactory();
     }
 
     @ParameterizedTest
