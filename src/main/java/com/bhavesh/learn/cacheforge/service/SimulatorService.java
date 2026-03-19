@@ -9,7 +9,11 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.aop.support.AopUtils;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -23,7 +27,25 @@ public class SimulatorService {
     @Autowired
     MeterRegistry meterRegistry;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+    
+    // configurable progress publish steps (percent and count)
+    @Value("${simulation.progress.percent-step:5}")
+    private int progressPercentStep = 5;
+
+    @Value("${simulation.progress.count-step:1000}")
+    private int progressCountStep = 1000;
+
     public Map<String, Object> runSimulation(SimulationRequest simulationRequest) {
+        return runSimulation(simulationRequest, null);
+    }
+
+    /**
+     * Overloaded runSimulation which accepts an optional runId. If runId is provided,
+     * progress events will be published to `/topic/simulation/{runId}`; otherwise to `/topic/simulation`.
+     */
+    public Map<String, Object> runSimulation(SimulationRequest simulationRequest, String runId) {
         Map<String, Object> allResults = new LinkedHashMap<>();
 
         for (WorkloadPattern pattern : simulationRequest.workloadPatterns()) {
@@ -34,7 +56,7 @@ public class SimulatorService {
                 Cache<Integer, String> cache = getCacheBasedOnStrategy(config);
 
                 Timer.Sample sample = Timer.start(meterRegistry);
-                runSimulationForCache(cache, cacheRequestList, config);
+                runSimulationForCache(cache, cacheRequestList, config, runId);
                 sample.stop(meterRegistry.timer("cache.simulation.latency",
                         "strategy", strategy.name(),
                         "pattern", pattern.name()));
@@ -65,6 +87,15 @@ public class SimulatorService {
 
 
     public void runSimulationForCache(Cache<Integer, String> cache, List<CacheRequest> cacheRequestList, SimulationConfig config) {
+        runSimulationForCache(cache, cacheRequestList, config, null);
+    }
+
+    public void runSimulationForCache(Cache<Integer, String> cache, List<CacheRequest> cacheRequestList, SimulationConfig config, String runId) {
+        int total = cacheRequestList.size();
+        int reportEveryByCount = Math.max(1, progressCountStep);
+        int completed = 0;
+        int lastPercentSent = 0;
+
         for (CacheRequest request : cacheRequestList) {
             Timer timer = meterRegistry.timer(
                     "cache.operation.latency",
@@ -80,12 +111,52 @@ public class SimulatorService {
                     cache.put(request.key(), request.value());
                 }
             });
+
+            completed++;
+
+            int percent = (int) ((completed * 100L) / (total == 0 ? 1 : total));
+            boolean shouldSend = false;
+            if (percent - lastPercentSent >= progressPercentStep) {
+                shouldSend = true;
+            }
+            if (completed % reportEveryByCount == 0) {
+                shouldSend = true;
+            }
+            if (completed == total) {
+                shouldSend = true;
+            }
+
+            if (shouldSend) {
+                lastPercentSent = percent;
+                Map<String, Object> event = new LinkedHashMap<>();
+                event.put("progressPercent", percent);
+                event.put("strategy", config.strategy().name());
+                event.put("pattern", config.pattern().name());
+                event.put("status", completed == total ? "COMPLETED" : "RUNNING");
+                event.put("iterationsCompleted", completed);
+                event.put("totalIterations", total);
+                publishEvent(event, runId);
+            }
+        }
+    }
+
+    private String topicForRun(String runId) {
+        return (runId == null || runId.isBlank()) ? "/topic/simulation" : ("/topic/simulation/" + runId);
+    }
+
+    private void publishEvent(Map<String, Object> event, String runId) {
+        try {
+            messagingTemplate.convertAndSend(topicForRun(runId), event);
+        } catch (Exception e) {
+            // Best-effort: do not throw to avoid failing the simulation
         }
     }
 
     public Map<String, Object> getStats(Cache<Integer, String> cache) {
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("Cache Type", cache.getCacheName());
+        // Unwrap AOP proxy if present so UI shows real cache type
+        String cacheTypeName = AopUtils.isAopProxy(cache) ? AopUtils.getTargetClass(cache).getSimpleName() : cache.getClass().getSimpleName();
+        stats.put("Cache Type", cacheTypeName);
         stats.put("Capacity", cache.getCapacity());
         stats.put("Final Size", cache.getSize());
         stats.put("Hit Count", cache.getHitCount());
@@ -108,8 +179,7 @@ public class SimulatorService {
     }
 
     public void registerMetrics(String patternName, String strategyName, Map<String, Object> stats) {
-        String keyPrefix = patternName + "-" + strategyName;
-
+        
         Gauge.builder("cache.stats.hit.count", stats, s -> ((Number) s.get("Hit Count")).doubleValue())
                 .description("Cache hit count")
                 .tags("strategy", strategyName, "pattern", patternName)
@@ -153,6 +223,10 @@ public class SimulatorService {
      * distributed across multiple threads.
      */
     public Map<String, Object> runConcurrentSimulation(SimulationRequest simulationRequest, int threadCount) {
+        return runConcurrentSimulation(simulationRequest, threadCount, null);
+    }
+
+    public Map<String, Object> runConcurrentSimulation(SimulationRequest simulationRequest, int threadCount, String runId) {
         Map<String, Object> allResults = new LinkedHashMap<>();
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
@@ -171,6 +245,10 @@ public class SimulatorService {
 
                     Timer.Sample sample = Timer.start(meterRegistry);
 
+                    AtomicInteger completed = new AtomicInteger(0);
+                    int totalRequests = cacheRequestList.size();
+                    AtomicInteger lastPercentSent = new AtomicInteger(0);
+
                     for (List<CacheRequest> partition : partitions) {
                         futures.add(executor.submit(() -> {
                             for (CacheRequest request : partition) {
@@ -178,6 +256,36 @@ public class SimulatorService {
                                     cache.get(request.key());
                                 } else if (request.operationType() == OperationType.PUT) {
                                     cache.put(request.key(), request.value());
+                                }
+
+                                int comp = completed.incrementAndGet();
+                                int percent = (int) ((comp * 100L) / Math.max(totalRequests, 1));
+                                boolean shouldSend = false;
+                                if (percent - lastPercentSent.get() >= progressPercentStep) {
+                                    shouldSend = true;
+                                }
+                                if (comp % Math.max(1, progressCountStep) == 0) {
+                                    shouldSend = true;
+                                }
+                                if (comp == totalRequests) {
+                                    shouldSend = true;
+                                }
+
+                                if (shouldSend) {
+                                    synchronized (lastPercentSent) {
+                                        int prev = lastPercentSent.get();
+                                        if (percent - prev >= progressPercentStep || comp % Math.max(1, progressCountStep) == 0 || comp == totalRequests) {
+                                            lastPercentSent.set(percent);
+                                            Map<String, Object> event = new LinkedHashMap<>();
+                                            event.put("progressPercent", percent);
+                                            event.put("strategy", config.strategy().name());
+                                            event.put("pattern", config.pattern().name());
+                                            event.put("status", comp == totalRequests ? "COMPLETED" : "RUNNING");
+                                            event.put("iterationsCompleted", comp);
+                                            event.put("totalIterations", totalRequests);
+                                            publishEvent(event, runId);
+                                        }
+                                    }
                                 }
                             }
                         }));
@@ -214,6 +322,10 @@ public class SimulatorService {
      * Run all strategy×pattern combinations in parallel using CompletableFuture.
      */
     public Map<String, Object> runSimulationAsync(SimulationRequest simulationRequest) {
+        return runSimulationAsync(simulationRequest, null);
+    }
+
+    public Map<String, Object> runSimulationAsync(SimulationRequest simulationRequest, String runId) {
         Map<String, Object> allResults = new ConcurrentHashMap<>();
         List<CompletableFuture<Void>> futures = new ArrayList<>();
 
@@ -226,7 +338,7 @@ public class SimulatorService {
                     Cache<Integer, String> cache = getCacheBasedOnStrategy(config);
 
                     Timer.Sample sample = Timer.start(meterRegistry);
-                    runSimulationForCache(cache, cacheRequestList, config);
+                    runSimulationForCache(cache, cacheRequestList, config, runId);
                     sample.stop(meterRegistry.timer("cache.simulation.latency",
                             "strategy", strategy.name(),
                             "pattern", pattern.name()));

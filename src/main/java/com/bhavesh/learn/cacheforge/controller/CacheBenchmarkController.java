@@ -17,8 +17,13 @@ public class CacheBenchmarkController {
     SimulatorService simulatorService;
 
     @PostMapping("/simulate")
-    public Map<String, Object> simulateCacheBenchmark(@RequestBody SimulationRequest simulationRequest) {
-        return simulatorService.runSimulation(simulationRequest);
+    public Map<String, Object> simulateCacheBenchmark(@RequestBody SimulationRequest simulationRequest,
+                                                      @RequestParam(required = false) String runId) {
+        if (runId == null || runId.isBlank()) {
+            return simulatorService.runSimulation(simulationRequest);
+        }
+        System.out.println("Received runId: " + runId);
+        return simulatorService.runSimulation(simulationRequest, runId);
     }
 
     @PostMapping("/simulate/all")
@@ -45,12 +50,20 @@ public class CacheBenchmarkController {
     @PostMapping("/simulate/concurrent")
     public Map<String, Object> simulateConcurrentBenchmark(
             @RequestBody SimulationRequest simulationRequest,
-            @RequestParam(defaultValue = "4") int threads) {
-        return simulatorService.runConcurrentSimulation(simulationRequest, threads);
+            @RequestParam(defaultValue = "4") int threads,
+            @RequestParam(required = false) String runId) {
+        if (runId == null || runId.isBlank()) {
+            return simulatorService.runConcurrentSimulation(simulationRequest, threads);
+        }
+        return simulatorService.runConcurrentSimulation(simulationRequest, threads, runId);
     }
 
     @PostMapping("/simulate/async")
-    public Map<String, Object> simulateAsyncBenchmark(@RequestBody SimulationRequest simulationRequest) {
-        return simulatorService.runSimulationAsync(simulationRequest);
+    public Map<String, Object> simulateAsyncBenchmark(@RequestBody SimulationRequest simulationRequest,
+                                                      @RequestParam(required = false) String runId) {
+        if (runId == null || runId.isBlank()) {
+            return simulatorService.runSimulationAsync(simulationRequest);
+        }
+        return simulatorService.runSimulationAsync(simulationRequest, runId);
     }
 }

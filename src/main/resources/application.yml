@@ -25,3 +25,8 @@ management:
   endpoint:
     prometheus:
       enabled: true
+
+simulation:
+  progress:
+    percent-step: 5    # send every 5% progress
+    count-step: 1000   # OR send every 1000 iterations

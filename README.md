@@ -1,175 +1,124 @@
-
 # CacheForge: Cache Simulation and Benchmarking Service
 
 ## Project Overview
 
-CacheForge is a Spring Boot application designed to simulate and benchmark various cache replacement algorithms under different workload patterns. It provides a RESTful API to trigger simulations, compare cache performance metrics (like hit rate, latency, and eviction count), and observe cache behavior.
+CacheForge is a Spring Boot application for simulating and benchmarking cache replacement algorithms under configurable workload patterns. It provides a REST API and a simple web UI to run experiments, stream progress updates over WebSocket/STOMP, and compare results (hit rate, latency, evictions, etc.) between cache algorithms.
 
-This project is an excellent demonstration of:
-* Implementing fundamental caching algorithms.
-* Applying the Decorator design pattern for cross-cutting concerns (like TTL).
-* Building a modular Spring Boot REST API.
+There is an online hosted demo you can try at: https://cache-forge.onrender.com
+
+## Quick demo / screenshots
+
+Open the live UI at https://cache-forge.onrender.com to try a simulation from your browser.
+
+![Dashboard snapshot](assets/dashboard-screenshot.png)
+
+![Simulation details snapshot](assets/simulation-demo.webp)
 
 ## Features
 
-* **Multiple Cache Algorithms Implemented:**
-    * **LRU (Least Recently Used):** Evicts the least recently accessed item.
-    * **LFU (Least Frequently Used):** Evicts the least frequently accessed item.
-    * **FIFO (First-In, First-Out):** Evicts the oldest item based on insertion order.
-    * **MRU (Most Recently Used):** Evicts the most recently accessed item (less common, but useful for specific scenarios).
-* **Time-To-Live (TTL) Caching:**
-    * Implemented as a `TTLCacheDecorator` that wraps any base cache.
-    * Automatically Forges expired keys in the background using a scheduled task.
-* **Diverse Workload Generators:**
-    * **Random:** Uniformly random key access.
-    * **Sequential:** Keys accessed in a sequential order.
-    * **Zipfian:** Simulates real-world skewed access patterns (a few keys are very popular).
-    * **Hotspot:** Concentrates a high percentage of access on a small "hot" set of keys.
-    * **Temporal Hotspot:** Shifts the "hot" set of keys over time, simulating changing popularities.
-    * **TTL Generator:** Specifically generates requests that simulate TTL scenarios (mix of new/refresh puts and gets on expiring items).
-* **Performance Metrics Collection (Manual):**
-    * Tracks Hit Count, Miss Count, Eviction Count, Total Latency, Average Latency, and Hit Rate. Latency is measured manually within cache operations using `System.nanoTime()`.
-* **RESTful API for Simulations:** Trigger simulations and retrieve detailed results via simple HTTP requests.
-* **Swagger UI Integration:** Easy API documentation and interaction via Swagger UI.
+- Multiple cache algorithms implemented (see list below)
+- Workload generators for a variety of realistic access patterns
+- Latency tracking via a lightweight decorator (`LatencyTrackingCache`) so simulation-created caches measure operation latency without requiring Spring AOP
+- Concurrent simulation mode with thread-safe cache wrappers (`ConcurrentCacheDecorator`)
+- WebSocket/STOMP progress updates during simulations (topic: `/topic/simulation`)
+- Configurable progress publish thresholds (percent-step and count-step) via properties
+- Metrics exported via Micrometer (Gauges) — you can scrape these with Prometheus
+- Simple REST API and Swagger UI for interactive exploration
 
-## Core Components & Architecture
+## Implemented Cache Algorithms
 
-* **`com.bhavesh.learn.cacheforge.model`**: Contains the `Cache` interface and its concrete implementations (LRU, LFU, FIFO, MRU).
-* **`com.bhavesh.learn.cacheforge.domain`**: Houses common data structures (`Node`, `DoublyLinkedList`), domain models (`CacheRequest`, `SimulationConfig`, `SimulationRequest`), and the `TTLCacheDecorator`.
-* **`com.bhavesh.learn.cacheforge.generator`**: Defines the `WorkLoadGenerator` interface and its `impl` subpackage contains various workload generation strategies.
-* **`com.bhavesh.learn.cacheforge.service.SimulatorService`**: The main service orchestrating simulations. It dynamically selects cache types and workload generators, runs the simulation, and collects metrics.
-* **`com.bhavesh.learn.cacheforge.controller.CacheBenchmarkController`**: Exposes the simulation functionality as REST endpoints.
-* **`com.bhavesh.learn.cacheforge.config.CacheConfig`**: Defines the cache implementations as prototype-scoped Spring Beans, allowing Spring to manage their lifecycle.
+- LRU (Least Recently Used)
+- LFU (Least Frequently Used)
+- FIFO (First-In, First-Out)
+- MRU (Most Recently Used)
+- Random (evict a random key)
+- CLOCK (Second-chance approximation of LRU)
+- ARC (Adaptive Replacement Cache)
+- TTL_LRU (LRU with TTL implemented as a decorator)
 
-## Technologies Used
+Many of these are implemented using the same `Cache` interface and share the `Node` / `DoublyLinkedList` helper classes where appropriate.
 
-* **Java 21+**
-* **Spring Boot 3.x:** For rapid application development and REST API.
-* **Maven:** For project build and dependency management.
-* **Springdoc-openapi-starter-webmvc-ui:** For Swagger UI documentation.
-* **Apache Commons Math:** Used for statistical distributions like Zipfian in workload generation.
+## Workload Generators
 
-## Setup and Running
+- Random: uniform random key accesses
+- Sequential: sequential range scans
+- Zipfian: skewed, heavy-tail access distribution
+- Hotspot: fixed hot set of keys receives most of the traffic
+- Temporal Hotspot: hot set shifts over time
+- TTL: exercise TTL expiry behavior with puts/gets on expiring keys
 
-### Prerequisites
+## Web UI & WebSocket
 
-* Java Development Kit (JDK) 21 or higher.
-* Apache Maven.
+The front-end (`static/index.html`) connects using SockJS + STOMP to the server endpoint `/ws` and subscribes to `/topic/simulation`. Progress events are published as JSON objects with fields like:
 
-### Clone the Repository
+{
+  "progressPercent": 42,
+  "strategy": "LRU",
+  "pattern": "random",
+  "status": "RUNNING",
+  "iterationsCompleted": 42000,
+  "totalIterations": 100000
+}
 
-```bash
-git clone <your-repo-url>
-cd cacheForge
-````
+The UI also sends POST requests to `/api/cache/benchmark/simulate` (and variants) to start simulations. A temporary debug endpoint is available for manual testing: `POST /api/debug/ws-test` which sends a sample event to `/topic/simulation`.
 
-### Build the Project
+## How the simulator measures latency
 
-```bash
-mvn clean install
-```
-
-### Run the Application
-
-```bash
-mvn spring-boot:run
-# Or, if you've built the JAR:
-# java -jar target/cacheForge-0.0.1-SNAPSHOT.jar
-```
-
-The application will start on `http://localhost:8080/` by default.
-
-## API Endpoints
-
-Once the application is running, you can interact with it using tools like Postman, curl, or your browser.
-
-### Base URL
-
-`http://localhost:8080/api/cache/benchmark`
-
-### Swagger UI
-
-Access the interactive API documentation directly at: `http://localhost:8080/`.
-
-### Endpoints:
-
-#### 1\. Run a Specific Simulation
-
-Runs a single simulation with specified cache strategy, workload pattern, and parameters.
-
-* **URL:** `/api/cache/benchmark/simulate`
-* **Method:** `POST`
-* **Request Body (`SimulationRequest`):**
-  ```json
-  {
-    "cacheStrategies": ["LRU"],         // List of cache strategies to test (e.g., ["LRU", "LFU"])
-    "cacheSize": 100,                   // Capacity of the cache
-    "workloadPatterns": ["random"],     // List of workload patterns (e.g., ["random", "zipfian"])
-    "iterations": 100000,               // Total number of requests in the simulation
-    "keySpaceSize": 1000,               // Range of keys (0 to keySpaceSize-1)
-    "readWriteRatio": 0.8               // Ratio of GET operations (0.8 means 80% GETs, 20% PUTs)
-  }
-  ```
-* **Response:** `Map<String, Object>` containing detailed metrics for each simulation run (e.g., "LRU-random": { ... metrics ... }).
-
-#### 2\. Simulate All Cache Strategies & All Workload Patterns
-
-Runs simulations for all implemented cache strategies against all implemented workload patterns using common parameters.
-
-* **URL:** `/api/cache/benchmark/simulate/all`
-* **Method:** `POST`
-* **Request Body (`SimulationCommonParams`):**
-  ```json
-  {
-    "cacheSize": 100,
-    "iterations": 100000,
-    "keySpaceSize": 1000,
-    "readWriteRatio": 0.7
-  }
-  ```
-* **Response:** `Map<String, Object>` with results for each combination.
-
-#### 3\. Simulate All Cache Strategies for a Specific Workload Pattern
-
-Runs simulations for all implemented cache strategies against a single specified workload pattern.
-
-* **URL:** `/api/cache/benchmark/simulate/all-strategies`
-* **Method:** `POST`
-* **Query Parameter:** `pattern=<WorkloadPattern>` (e.g., `random`, `zipfian`)
-* **Request Body (`SimulationCommonParams`):**
-  ```json
-  {
-    "cacheSize": 100,
-    "iterations": 100000,
-    "keySpaceSize": 1000,
-    "readWriteRatio": 0.7
-  }
-  ```
-* **Response:** `Map<String, Object>` with results for each cache strategy.
-
-#### 4\. Simulate All Workload Patterns for a Specific Cache Strategy
-
-Runs simulations for all implemented workload patterns for a single specified cache strategy.
-
-* **URL:** `/api/cache/benchmark/simulate/all-patterns`
-* **Method:** `POST`
-* **Query Parameter:** `strategy=<CacheStrategy>` (e.g., `LRU`, `LFU`)
-* **Request Body (`SimulationCommonParams`):**
-  ```json
-  {
-    "cacheSize": 100,
-    "iterations": 100000,
-    "keySpaceSize": 1000,
-    "readWriteRatio": 0.7
-  }
-  ```
-* **Response:** `Map<String, Object>` with results for each workload pattern.
+Latency is measured in the `LatencyTrackingCache` decorator using `System.nanoTime()` around `get`, `put`, and `remove` operations. The decorator accumulates nanoseconds and `SimulatorService` converts to milliseconds when building JSON stats.
 
 ## Configuration
 
-The `application.properties` file (`src/main/resources/application.properties`) allows you to configure global application settings, including TTL:
+Default properties live in `src/main/resources/application.yml` or `application.properties`. Useful settings:
 
-```properties
-spring.application.name=cache-Forge
-server.port=8080
+```yaml
+# progress publishing thresholds
+simulation:
+  progress:
+    percent-step: 5    # send every 5% progress
+    count-step: 1000   # OR send every 1000 iterations
 ```
+
+## API Reference (summary)
+
+Base URL: `http://localhost:8080/api/cache/benchmark`
+
+- POST `/simulate` — run simulations for provided `SimulationRequest` (accepts lists of strategies and workload patterns)
+- POST `/simulate/all` — run all strategies × all patterns using shared `SimulationCommonParams`
+- POST `/simulate/all-strategies?pattern=<pattern>` — run all strategies for a given pattern
+- POST `/simulate/all-patterns?strategy=<strategy>` — run all patterns for a given strategy
+- POST `/simulate/concurrent?threads=4` — run simulation concurrently across threads
+- POST `/simulate/async` — run all runs asynchronously and return aggregated results when finished
+
+There is also `POST /api/debug/ws-test` which emits a sample WebSocket simulation event for manual testing.
+
+## Running locally
+
+Prerequisites:
+- Java 21+
+- Maven
+
+Build and run:
+```bash
+mvn clean package
+mvn spring-boot:run
+# or: java -jar target/cache-forge-0.0.1-SNAPSHOT.jar
+```
+
+Open your browser at `http://localhost:8080/` to view the UI and the Swagger playground.
+
+## Notes / Architecture details
+
+- The simulator constructs cache instances per run using `getCacheBasedOnStrategy(...)` and wraps them with `LatencyTrackingCache` so latency is measured for simulation-run objects (no need for caches to be Spring beans).
+- `SimulatorService` publishes periodic progress updates to `/topic/simulation`. Defaults are 5% increments and every 1000 iterations; both are configurable.
+- `ConcurrentCacheDecorator` provides a thread-safe wrapper used for concurrent simulations.
+
+## Live demo
+
+You can try a live demo at: https://cache-forge.onrender.com
+
+## Contributing
+
+Contributions are welcome. Please open issues and PRs with small, focused changes. Unit tests are present for most core components (cache implementations, workload generators, decorators), run them with `mvn test`.
+
+---
+

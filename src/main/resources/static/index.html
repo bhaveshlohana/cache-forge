@@ -340,6 +340,8 @@ const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f9
 
 let charts = {};
 let stompClient = null;
+let globalSubscription = null;
+let runSubscription = null;
 
 // Init checkboxes
 function initCheckboxes() {
@@ -382,10 +384,15 @@ function connectWebSocket() {
         stompClient.connect({}, () => {
             document.getElementById('wsStatus').className = 'status-dot connected';
             document.getElementById('wsStatusText').textContent = 'Connected';
-            stompClient.subscribe('/topic/simulation', (msg) => {
-                const event = JSON.parse(msg.body);
-                updateProgress(event.progressPercent, `${event.strategy} / ${event.pattern}: ${event.status}`);
-            });
+            // keep a global subscription for debug or non-run messages
+            try {
+                globalSubscription = stompClient.subscribe('/topic/simulation', (msg) => {
+                    const event = JSON.parse(msg.body);
+                    updateProgress(event.progressPercent, `${event.strategy} / ${event.pattern}: ${event.status}`);
+                });
+            } catch (e) {
+                // ignore
+            }
         }, () => {
             document.getElementById('wsStatus').className = 'status-dot disconnected';
             document.getElementById('wsStatusText').textContent = 'Disconnected';
@@ -395,6 +402,13 @@ function connectWebSocket() {
         document.getElementById('wsStatus').className = 'status-dot disconnected';
         document.getElementById('wsStatusText').textContent = 'Unavailable';
     }
+}
+
+function generateRunId() {
+    if (window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+    }
+    return 'run-' + Date.now() + '-' + Math.random().toString(36).slice(2,9);
 }
 
 function updateProgress(pct, text) {
@@ -414,6 +428,23 @@ async function runSimulation(mode = 'standard') {
         return;
     }
 
+    const runId = generateRunId();
+    // subscribe to per-run topic so UI receives only this run's progress
+    try {
+        if (stompClient && stompClient.connected) {
+            // unsubscribe previous run subscription if any
+            if (runSubscription && typeof runSubscription.unsubscribe === 'function') {
+                try { runSubscription.unsubscribe(); } catch(e) { /* ignore */ }
+            }
+            runSubscription = stompClient.subscribe('/topic/simulation/' + runId, (msg) => {
+                const event = JSON.parse(msg.body);
+                updateProgress(event.progressPercent, `${event.strategy} / ${event.pattern}: ${event.status}`);
+            });
+        }
+    } catch (e) {
+        console.warn('Could not subscribe to per-run topic', e);
+    }
+
     const body = {
         cacheStrategies: strategies,
         cacheSize: parseInt(document.getElementById('cacheSize').value),
@@ -430,6 +461,9 @@ async function runSimulation(mode = 'standard') {
     let url = '/api/cache/benchmark/simulate';
     if (mode === 'concurrent') url += '/concurrent?threads=4';
     else if (mode === 'async') url += '/async';
+
+    // attach runId query param so server publishes to per-run topic
+    url += (url.indexOf('?') === -1 ? '?' : '&') + 'runId=' + encodeURIComponent(runId);
 
     try {
         const res = await fetch(url, {
@@ -448,6 +482,15 @@ async function runSimulation(mode = 'standard') {
         console.error(err);
     } finally {
         btn.disabled = false;
+        // unsubscribe per-run subscription after a short delay to allow final WS message to arrive
+        setTimeout(() => {
+            try {
+                if (runSubscription && typeof runSubscription.unsubscribe === 'function') runSubscription.unsubscribe();
+            } catch (e) {
+                /* ignore */
+            }
+            runSubscription = null;
+        }, 2000);
     }
 }
 
