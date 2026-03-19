@@ -71,17 +71,24 @@ public class SimulatorService {
 
     public Cache<Integer, String> getCacheBasedOnStrategy(SimulationConfig simulationConfig) {
         long cacheSize = simulationConfig.cacheSize();
+
+        // Step 1: Create base cache from strategy
         Cache<Integer, String> cache = switch (simulationConfig.strategy()) {
             case LFU -> new LFUCache<>(cacheSize);
             case LRU -> new LRUCache<>(cacheSize);
             case FIFO -> new FIFOCache<>(cacheSize);
             case MRU -> new MRUCache<>(cacheSize);
-            case TTL_LRU -> new TTLCacheDecorator<>(new LRUCache<>(cacheSize), 1, TimeUnit.NANOSECONDS);
             case RANDOM -> new RandomCache<>(cacheSize);
             case ARC -> new ARCCache<>(cacheSize);
             case CLOCK -> new ClockCache<>(cacheSize);
         };
 
+        // Step 2: Optionally wrap with TTL decorator
+        if (simulationConfig.ttlEnabled()) {
+            cache = new TTLCacheDecorator<>(cache, simulationConfig.ttlDuration(), simulationConfig.ttlUnit());
+        }
+
+        // Step 3: Always wrap with latency tracking
         return new LatencyTrackingCache<>(cache);
     }
 
@@ -154,9 +161,7 @@ public class SimulatorService {
 
     public Map<String, Object> getStats(Cache<Integer, String> cache) {
         Map<String, Object> stats = new LinkedHashMap<>();
-        // Unwrap AOP proxy if present so UI shows real cache type
-        String cacheTypeName = AopUtils.isAopProxy(cache) ? AopUtils.getTargetClass(cache).getSimpleName() : cache.getClass().getSimpleName();
-        stats.put("Cache Type", cacheTypeName);
+        stats.put("Cache Type", cache.getCacheName());
         stats.put("Capacity", cache.getCapacity());
         stats.put("Final Size", cache.getSize());
         stats.put("Hit Count", cache.getHitCount());

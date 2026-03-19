@@ -13,14 +13,14 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldThrowOnZeroTTL() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         assertThrows(IllegalArgumentException.class,
                 () -> new TTLCacheDecorator<>(delegate, 0, TimeUnit.MILLISECONDS));
     }
 
     @Test
     void shouldThrowOnNegativeTTL() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         assertThrows(IllegalArgumentException.class,
                 () -> new TTLCacheDecorator<>(delegate, -5, TimeUnit.MILLISECONDS));
     }
@@ -29,7 +29,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldPutAndGetBeforeExpiry() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "Apple");
@@ -38,7 +38,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldReturnNullForMissingKey() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         assertNull(cache.get(99));
@@ -48,7 +48,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldReturnNullAfterTTLExpires() throws InterruptedException {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 50, TimeUnit.MILLISECONDS);
 
         cache.put(1, "Apple");
@@ -61,7 +61,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldTrackMissCountForExpiredEntries() throws InterruptedException {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 50, TimeUnit.MILLISECONDS);
 
         cache.put(1, "Apple");
@@ -77,7 +77,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldTrackEvictionCountForExpiredEntries() throws InterruptedException {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 50, TimeUnit.MILLISECONDS);
 
         cache.put(1, "Apple");
@@ -93,7 +93,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldDelegateSize() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "A");
@@ -104,7 +104,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldDelegateCapacity() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(5);
+        LRUCache<Integer, String> delegate = new LRUCache<>(5);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         assertEquals(5, cache.getCapacity());
@@ -112,7 +112,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldDelegateRemove() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "A");
@@ -125,7 +125,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldClearAndResetStats() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "A");
@@ -139,7 +139,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldResetStats() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "A");
@@ -155,7 +155,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldReturnTTLPrefixedCacheName() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         assertEquals("TTL-LRUCache", cache.getCacheName());
@@ -163,7 +163,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldDelegateTotalLatency() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         assertEquals(0, cache.getTotalLatency());
@@ -171,7 +171,7 @@ class TTLCacheDecoratorTest {
 
     @Test
     void shouldReturnToString() {
-        LRUCache<Integer, TimedValue<String>> delegate = new LRUCache<>(3);
+        LRUCache<Integer, String> delegate = new LRUCache<>(3);
         TTLCacheDecorator<Integer, String> cache = new TTLCacheDecorator<>(delegate, 10, TimeUnit.SECONDS);
 
         cache.put(1, "A");

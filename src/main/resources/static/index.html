@@ -122,11 +122,51 @@
             user-select: none;
         }
         .checkbox-label:hover { border-color: var(--accent); }
-        .checkbox-label input { display: none; }
+        .checkbox-label input[type="checkbox"] { display: none; }
         .checkbox-label.active {
             background: var(--accent-glow); border-color: var(--accent);
             color: var(--accent-light);
         }
+
+        /* TTL Toggle */
+        .ttl-section {
+            display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
+            margin-top: 1rem; padding: 1rem; border-radius: 12px;
+            background: var(--bg-glass); border: 1px solid var(--border);
+            transition: border-color 0.3s;
+        }
+        .ttl-section.enabled { border-color: var(--warning); background: rgba(245,158,11,0.05); }
+        .toggle-switch {
+            position: relative; width: 44px; height: 24px; cursor: pointer;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--border); border-radius: 24px; transition: 0.3s;
+        }
+        .toggle-slider:before {
+            content: ''; position: absolute; height: 18px; width: 18px;
+            left: 3px; bottom: 3px; background: var(--text-primary);
+            border-radius: 50%; transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background: var(--warning); }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+        .ttl-fields {
+            display: flex; gap: 0.8rem; align-items: flex-end; opacity: 0.4;
+            pointer-events: none; transition: all 0.3s;
+        }
+        .ttl-fields.active { opacity: 1; pointer-events: auto; }
+        .ttl-fields .form-group { min-width: 100px; }
+        .ttl-fields input, .ttl-fields select {
+            background: var(--bg-glass); border: 1px solid var(--border);
+            border-radius: 8px; padding: 0.5rem 0.7rem; color: var(--text-primary);
+            font-family: 'Inter', sans-serif; font-size: 0.85rem;
+        }
+        .ttl-fields input:focus, .ttl-fields select:focus {
+            outline: none; border-color: var(--warning);
+            box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
+        }
+        .ttl-fields select option { background: var(--bg-secondary); }
 
         /* Buttons */
         .btn-row { display: flex; gap: 0.8rem; margin-top: 1rem; flex-wrap: wrap; }
@@ -267,6 +307,31 @@
             </div>
         </div>
 
+        <!-- TTL Configuration -->
+        <div class="ttl-section" id="ttlSection">
+            <label class="toggle-switch">
+                <input type="checkbox" id="ttlToggle" onchange="toggleTTL()">
+                <span class="toggle-slider"></span>
+            </label>
+            <span style="font-size:0.85rem;font-weight:500;color:var(--text-secondary);">⏱️ Enable TTL (Time-To-Live)</span>
+            <div class="ttl-fields" id="ttlFields">
+                <div class="form-group">
+                    <label>Duration</label>
+                    <input type="number" id="ttlDuration" value="5000" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Unit</label>
+                    <select id="ttlUnit">
+                        <option value="NANOSECONDS">Nanoseconds</option>
+                        <option value="MICROSECONDS">Microseconds</option>
+                        <option value="MILLISECONDS" selected>Milliseconds</option>
+                        <option value="SECONDS">Seconds</option>
+                        <option value="MINUTES">Minutes</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
         <div class="btn-row">
             <button class="btn btn-primary" id="runBtn" onclick="runSimulation()">
                 🚀 Run Simulation
@@ -334,7 +399,7 @@
 </div>
 
 <script>
-const STRATEGIES = ['LRU','LFU','FIFO','MRU','RANDOM','ARC','CLOCK','TTL_LRU'];
+const STRATEGIES = ['LRU','LFU','FIFO','MRU','RANDOM','ARC','CLOCK'];
 const PATTERNS = ['random','sequential','zipfian','hotspot','temporalHotspot','ttl'];
 const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f97316','#ef4444'];
 
@@ -445,13 +510,17 @@ async function runSimulation(mode = 'standard') {
         console.warn('Could not subscribe to per-run topic', e);
     }
 
+    const ttlEnabled = document.getElementById('ttlToggle').checked;
     const body = {
         cacheStrategies: strategies,
         cacheSize: parseInt(document.getElementById('cacheSize').value),
         workloadPatterns: patterns,
         iterations: parseInt(document.getElementById('iterations').value),
         keySpaceSize: parseInt(document.getElementById('keySpaceSize').value),
-        readWriteRatio: parseFloat(document.getElementById('readWriteRatio').value)
+        readWriteRatio: parseFloat(document.getElementById('readWriteRatio').value),
+        ttlEnabled: ttlEnabled,
+        ttlDuration: ttlEnabled ? parseInt(document.getElementById('ttlDuration').value) : 0,
+        ttlUnit: ttlEnabled ? document.getElementById('ttlUnit').value : 'MILLISECONDS'
     };
 
     const btn = document.getElementById('runBtn');
@@ -587,6 +656,12 @@ function renderResults(data) {
         `;
         tbody.appendChild(tr);
     });
+}
+
+function toggleTTL() {
+    const enabled = document.getElementById('ttlToggle').checked;
+    document.getElementById('ttlFields').classList.toggle('active', enabled);
+    document.getElementById('ttlSection').classList.toggle('enabled', enabled);
 }
 
 // Init

@@ -74,12 +74,28 @@ class SimulatorServiceTest {
     }
 
     @Test
-    void shouldReturnTTLLRUCache() {
-        SimulationConfig config = new SimulationConfig(CacheStrategy.TTL_LRU, 100, WorkloadPattern.random, 10, 5, 0.5);
+    void shouldReturnTTLWrappedCacheWhenTTLEnabled() {
+        SimulationConfig config = new SimulationConfig(
+                CacheStrategy.LRU, 100, WorkloadPattern.random, 10, 5, 0.5,
+                true, 5000, java.util.concurrent.TimeUnit.MILLISECONDS
+        );
         Cache<Integer, String> cache = simulatorService.getCacheBasedOnStrategy(config);
 
         assertNotNull(cache);
         assertTrue(cache.getCacheName().contains("TTL"));
+    }
+
+    @Test
+    void shouldReturnNonTTLCacheWhenTTLDisabled() {
+        SimulationConfig config = new SimulationConfig(
+                CacheStrategy.LRU, 100, WorkloadPattern.random, 10, 5, 0.5,
+                false, 0, java.util.concurrent.TimeUnit.MILLISECONDS
+        );
+        Cache<Integer, String> cache = simulatorService.getCacheBasedOnStrategy(config);
+
+        assertNotNull(cache);
+        assertFalse(cache.getCacheName().contains("TTL"));
+        assertEquals("LRUCache", cache.getCacheName());
     }
 
     @ParameterizedTest
