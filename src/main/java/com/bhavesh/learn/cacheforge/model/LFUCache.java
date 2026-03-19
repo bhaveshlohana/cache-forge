@@ -134,6 +134,7 @@ public class LFUCache<K, V> implements Cache<K, V> {
     public void clear() {
         cacheMap.clear();
         freqMap = new HashMap<>();
+        size = 0;
         resetStats();
     }
 
