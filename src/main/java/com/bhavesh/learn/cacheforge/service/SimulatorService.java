@@ -11,10 +11,8 @@ import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 
 @Service
 public class SimulatorService {
@@ -57,7 +55,9 @@ public class SimulatorService {
             case FIFO -> new FIFOCache<>(cacheSize);
             case MRU -> new MRUCache<>(cacheSize);
             case TTL_LRU -> new TTLCacheDecorator<>(new LRUCache<>(cacheSize), 1, TimeUnit.NANOSECONDS);
-            default -> new LRUCache<>(cacheSize);
+            case RANDOM -> new RandomCache<>(cacheSize);
+            case ARC -> new ARCCache<>(cacheSize);
+            case CLOCK -> new ClockCache<>(cacheSize);
         };
 
         return new LatencyTrackingCache<>(cache);
@@ -145,5 +145,111 @@ public class SimulatorService {
                 .description("Hit rate percentage")
                 .tags("strategy", strategyName, "pattern", patternName)
                 .register(meterRegistry);
+    }
+
+    /**
+     * Run simulation with thread-safe caches and concurrent workload execution.
+     * Each cache is wrapped in a ConcurrentCacheDecorator, and the workload is
+     * distributed across multiple threads.
+     */
+    public Map<String, Object> runConcurrentSimulation(SimulationRequest simulationRequest, int threadCount) {
+        Map<String, Object> allResults = new LinkedHashMap<>();
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+        try {
+            for (WorkloadPattern pattern : simulationRequest.workloadPatterns()) {
+                for (CacheStrategy strategy : simulationRequest.cacheStrategies()) {
+                    SimulationConfig config = simulationRequest.withPatternAndStrategy(pattern, strategy);
+                    List<CacheRequest> cacheRequestList = workloadGeneratorService.generateCacheRequest(config);
+
+                    // Wrap in ConcurrentCacheDecorator for thread safety
+                    Cache<Integer, String> cache = new ConcurrentCacheDecorator<>(getCacheBasedOnStrategy(config));
+
+                    // Partition workload across threads
+                    List<List<CacheRequest>> partitions = partitionList(cacheRequestList, threadCount);
+                    List<Future<?>> futures = new ArrayList<>();
+
+                    Timer.Sample sample = Timer.start(meterRegistry);
+
+                    for (List<CacheRequest> partition : partitions) {
+                        futures.add(executor.submit(() -> {
+                            for (CacheRequest request : partition) {
+                                if (request.operationType() == OperationType.GET) {
+                                    cache.get(request.key());
+                                } else if (request.operationType() == OperationType.PUT) {
+                                    cache.put(request.key(), request.value());
+                                }
+                            }
+                        }));
+                    }
+
+                    // Wait for all threads to complete
+                    for (Future<?> future : futures) {
+                        try {
+                            future.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            Thread.currentThread().interrupt();
+                            throw new RuntimeException("Concurrent simulation failed", e);
+                        }
+                    }
+
+                    sample.stop(meterRegistry.timer("cache.concurrent.simulation.latency",
+                            "strategy", strategy.name(),
+                            "pattern", pattern.name()));
+
+                    Map<String, Object> stats = getStats(cache);
+                    stats.put("Thread Count", threadCount);
+                    allResults.put(pattern.name() + "-" + strategy.name(), stats);
+                    registerMetrics(pattern.name(), strategy.name(), stats);
+                }
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        return allResults;
+    }
+
+    /**
+     * Run all strategy×pattern combinations in parallel using CompletableFuture.
+     */
+    public Map<String, Object> runSimulationAsync(SimulationRequest simulationRequest) {
+        Map<String, Object> allResults = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (WorkloadPattern pattern : simulationRequest.workloadPatterns()) {
+            for (CacheStrategy strategy : simulationRequest.cacheStrategies()) {
+                SimulationConfig config = simulationRequest.withPatternAndStrategy(pattern, strategy);
+
+                CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                    List<CacheRequest> cacheRequestList = workloadGeneratorService.generateCacheRequest(config);
+                    Cache<Integer, String> cache = getCacheBasedOnStrategy(config);
+
+                    Timer.Sample sample = Timer.start(meterRegistry);
+                    runSimulationForCache(cache, cacheRequestList, config);
+                    sample.stop(meterRegistry.timer("cache.simulation.latency",
+                            "strategy", strategy.name(),
+                            "pattern", pattern.name()));
+
+                    Map<String, Object> stats = getStats(cache);
+                    allResults.put(pattern.name() + "-" + strategy.name(), stats);
+                });
+
+                futures.add(future);
+            }
+        }
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        return new LinkedHashMap<>(allResults);
+    }
+
+    private <T> List<List<T>> partitionList(List<T> list, int partitions) {
+        List<List<T>> result = new ArrayList<>();
+        int size = list.size();
+        int chunkSize = Math.max(1, (size + partitions - 1) / partitions);
+        for (int i = 0; i < size; i += chunkSize) {
+            result.add(list.subList(i, Math.min(i + chunkSize, size)));
+        }
+        return result;
     }
 }

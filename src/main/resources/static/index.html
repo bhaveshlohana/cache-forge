@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CacheForge — Cache Benchmark Dashboard</title>
+    <meta name="description" content="Interactive cache eviction strategy benchmarking dashboard with real-time simulation and visual comparison.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.8);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.06);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --chart-1: #6366f1;
+            --chart-2: #8b5cf6;
+            --chart-3: #ec4899;
+            --chart-4: #f59e0b;
+            --chart-5: #10b981;
+            --chart-6: #06b6d4;
+            --chart-7: #f97316;
+            --chart-8: #ef4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .bg-gradient {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background:
+                radial-gradient(ellipse at 20% 20%, rgba(99,102,241,0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 80%, rgba(139,92,246,0.06) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(6,182,212,0.04) 0%, transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+
+        .container {
+            max-width: 1400px; margin: 0 auto; padding: 2rem; position: relative; z-index: 1;
+        }
+
+        /* Header */
+        header {
+            text-align: center; margin-bottom: 3rem;
+        }
+        header h1 {
+            font-size: 2.5rem; font-weight: 800;
+            background: linear-gradient(135deg, var(--accent-light), #a78bfa, #c084fc);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem; letter-spacing: -0.02em;
+        }
+        header p {
+            color: var(--text-secondary); font-size: 1.1rem; font-weight: 300;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 16px; padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            transition: border-color 0.3s ease;
+        }
+        .card:hover { border-color: rgba(99,102,241,0.2); }
+        .card-title {
+            font-size: 0.85rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 1.2rem;
+        }
+
+        /* Form Grid */
+        .form-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label {
+            font-size: 0.8rem; font-weight: 500; color: var(--text-secondary);
+            margin-bottom: 0.4rem;
+        }
+        .form-group input, .form-group select {
+            background: var(--bg-glass); border: 1px solid var(--border);
+            border-radius: 10px; padding: 0.7rem 1rem; color: var(--text-primary);
+            font-family: 'Inter', sans-serif; font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+        .form-group select option { background: var(--bg-secondary); color: var(--text-primary); }
+
+        /* Checkboxes */
+        .checkbox-grid {
+            display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem;
+        }
+        .checkbox-label {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.4rem 0.8rem; border-radius: 8px;
+            background: var(--bg-glass); border: 1px solid var(--border);
+            cursor: pointer; font-size: 0.8rem; transition: all 0.2s;
+            user-select: none;
+        }
+        .checkbox-label:hover { border-color: var(--accent); }
+        .checkbox-label input { display: none; }
+        .checkbox-label.active {
+            background: var(--accent-glow); border-color: var(--accent);
+            color: var(--accent-light);
+        }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 0.8rem; margin-top: 1rem; flex-wrap: wrap; }
+        .btn {
+            padding: 0.75rem 1.8rem; border: none; border-radius: 12px;
+            font-family: 'Inter', sans-serif; font-size: 0.9rem; font-weight: 600;
+            cursor: pointer; transition: all 0.3s; letter-spacing: 0.02em;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent), #7c3aed);
+            color: white; box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px); box-shadow: 0 6px 30px rgba(99,102,241,0.4);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5; cursor: not-allowed; transform: none;
+        }
+        .btn-secondary {
+            background: var(--bg-glass); color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--text-primary); }
+
+        /* Progress */
+        .progress-bar-container {
+            display: none; margin-top: 1rem;
+        }
+        .progress-bar-container.active { display: block; }
+        .progress-track {
+            height: 6px; background: var(--bg-glass); border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%; border-radius: 3px; transition: width 0.3s;
+            background: linear-gradient(90deg, var(--accent), var(--chart-3));
+        }
+        .progress-text {
+            font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
+        }
+        .chart-card { min-height: 350px; }
+        .chart-card canvas { max-height: 300px; }
+
+        /* Results Table */
+        .results-table-wrapper { overflow-x: auto; }
+        .results-table {
+            width: 100%; border-collapse: collapse; font-size: 0.85rem;
+        }
+        .results-table th {
+            padding: 0.8rem 1rem; text-align: left; font-weight: 600;
+            color: var(--text-muted); border-bottom: 1px solid var(--border);
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .results-table td {
+            padding: 0.75rem 1rem; border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+        .results-table tr:hover td { color: var(--text-primary); background: var(--bg-glass); }
+        .badge {
+            display: inline-block; padding: 0.2rem 0.6rem; border-radius: 6px;
+            font-size: 0.75rem; font-weight: 600;
+        }
+        .badge-strategy { background: var(--accent-glow); color: var(--accent-light); }
+        .badge-pattern { background: rgba(16,185,129,0.1); color: var(--success); }
+
+        /* Footer */
+        .footer {
+            text-align: center; margin-top: 3rem; padding: 1.5rem;
+            color: var(--text-muted); font-size: 0.8rem;
+        }
+        .footer a { color: var(--accent-light); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+
+        /* Status indicator */
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+            margin-right: 0.4rem;
+        }
+        .status-dot.connected { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .status-dot.disconnected { background: var(--danger); }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.5s ease forwards; }
+
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+        @media (max-width: 768px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .form-grid { grid-template-columns: 1fr 1fr; }
+            header h1 { font-size: 1.8rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="bg-gradient"></div>
+<div class="container">
+    <header>
+        <h1>⚡ CacheForge</h1>
+        <p>Interactive Cache Eviction Strategy Benchmark Dashboard</p>
+    </header>
+
+    <!-- Config Card -->
+    <div class="card fade-in">
+        <div class="card-title">⚙️ Simulation Configuration</div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Cache Size</label>
+                <input type="number" id="cacheSize" value="100" min="1">
+            </div>
+            <div class="form-group">
+                <label>Iterations</label>
+                <input type="number" id="iterations" value="10000" min="1">
+            </div>
+            <div class="form-group">
+                <label>Key Space Size</label>
+                <input type="number" id="keySpaceSize" value="200" min="1">
+            </div>
+            <div class="form-group">
+                <label>Read/Write Ratio</label>
+                <input type="number" id="readWriteRatio" value="0.7" min="0" max="1" step="0.05">
+            </div>
+        </div>
+
+        <div class="form-grid" style="margin-top: 1rem;">
+            <div class="form-group">
+                <label>Strategies</label>
+                <div class="checkbox-grid" id="strategies"></div>
+            </div>
+            <div class="form-group">
+                <label>Workload Patterns</label>
+                <div class="checkbox-grid" id="patterns"></div>
+            </div>
+        </div>
+
+        <div class="btn-row">
+            <button class="btn btn-primary" id="runBtn" onclick="runSimulation()">
+                🚀 Run Simulation
+            </button>
+            <button class="btn btn-secondary" onclick="runSimulation('concurrent')">
+                🔄 Run Concurrent (4 threads)
+            </button>
+            <button class="btn btn-secondary" onclick="runSimulation('async')">
+                ⚡ Run Async
+            </button>
+            <span style="display:flex;align-items:center;margin-left:auto;font-size:0.8rem;color:var(--text-muted);">
+                <span class="status-dot" id="wsStatus"></span>
+                <span id="wsStatusText">Disconnected</span>
+            </span>
+        </div>
+
+        <div class="progress-bar-container" id="progressContainer">
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+            <div class="progress-text" id="progressText">Preparing simulation...</div>
+        </div>
+    </div>
+
+    <!-- Charts Grid -->
+    <div class="charts-grid" id="chartsSection" style="display:none;">
+        <div class="card chart-card fade-in">
+            <div class="card-title">📊 Hit Rate Comparison</div>
+            <canvas id="hitRateChart"></canvas>
+        </div>
+        <div class="card chart-card fade-in">
+            <div class="card-title">⏱️ Average Latency (ms/op)</div>
+            <canvas id="latencyChart"></canvas>
+        </div>
+        <div class="card chart-card fade-in">
+            <div class="card-title">🔄 Eviction Count</div>
+            <canvas id="evictionChart"></canvas>
+        </div>
+        <div class="card chart-card fade-in">
+            <div class="card-title">🎯 Hit vs Miss</div>
+            <canvas id="hitMissChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Results Table -->
+    <div class="card fade-in" id="tableSection" style="display:none;">
+        <div class="card-title">📋 Detailed Results</div>
+        <div class="results-table-wrapper">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>Pattern</th><th>Strategy</th><th>Capacity</th><th>Final Size</th>
+                        <th>Hits</th><th>Misses</th><th>Hit Rate</th>
+                        <th>Evictions</th><th>Avg Latency</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>CacheForge Dashboard · <a href="/swagger">API Docs (Swagger)</a> · Built with Spring Boot + Chart.js</p>
+    </div>
+</div>
+
+<script>
+const STRATEGIES = ['LRU','LFU','FIFO','MRU','RANDOM','ARC','CLOCK','TTL_LRU'];
+const PATTERNS = ['random','sequential','zipfian','hotspot','temporalHotspot','ttl'];
+const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#06b6d4','#f97316','#ef4444'];
+
+let charts = {};
+let stompClient = null;
+
+// Init checkboxes
+function initCheckboxes() {
+    const stratEl = document.getElementById('strategies');
+    const patEl = document.getElementById('patterns');
+    const defaultStrategies = ['LRU','LFU','FIFO','MRU','RANDOM','ARC','CLOCK'];
+    const defaultPatterns = ['random','zipfian','hotspot'];
+
+    STRATEGIES.forEach(s => {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label' + (defaultStrategies.includes(s) ? ' active' : '');
+        label.innerHTML = `<input type="checkbox" value="${s}" ${defaultStrategies.includes(s) ? 'checked' : ''}>${s}`;
+        label.onclick = () => {
+            const cb = label.querySelector('input');
+            cb.checked = !cb.checked;
+            label.classList.toggle('active', cb.checked);
+        };
+        stratEl.appendChild(label);
+    });
+
+    PATTERNS.forEach(p => {
+        const label = document.createElement('label');
+        label.className = 'checkbox-label' + (defaultPatterns.includes(p) ? ' active' : '');
+        label.innerHTML = `<input type="checkbox" value="${p}" ${defaultPatterns.includes(p) ? 'checked' : ''}>${p}`;
+        label.onclick = () => {
+            const cb = label.querySelector('input');
+            cb.checked = !cb.checked;
+            label.classList.toggle('active', cb.checked);
+        };
+        patEl.appendChild(label);
+    });
+}
+
+// WebSocket
+function connectWebSocket() {
+    try {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.debug = null; // Suppress logs
+        stompClient.connect({}, () => {
+            document.getElementById('wsStatus').className = 'status-dot connected';
+            document.getElementById('wsStatusText').textContent = 'Connected';
+            stompClient.subscribe('/topic/simulation', (msg) => {
+                const event = JSON.parse(msg.body);
+                updateProgress(event.progressPercent, `${event.strategy} / ${event.pattern}: ${event.status}`);
+            });
+        }, () => {
+            document.getElementById('wsStatus').className = 'status-dot disconnected';
+            document.getElementById('wsStatusText').textContent = 'Disconnected';
+            setTimeout(connectWebSocket, 3000);
+        });
+    } catch (e) {
+        document.getElementById('wsStatus').className = 'status-dot disconnected';
+        document.getElementById('wsStatusText').textContent = 'Unavailable';
+    }
+}
+
+function updateProgress(pct, text) {
+    const container = document.getElementById('progressContainer');
+    container.classList.add('active');
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressText').textContent = text;
+}
+
+// Run simulation
+async function runSimulation(mode = 'standard') {
+    const strategies = [...document.querySelectorAll('#strategies input:checked')].map(c => c.value);
+    const patterns = [...document.querySelectorAll('#patterns input:checked')].map(c => c.value);
+
+    if (!strategies.length || !patterns.length) {
+        alert('Please select at least one strategy and one pattern.');
+        return;
+    }
+
+    const body = {
+        cacheStrategies: strategies,
+        cacheSize: parseInt(document.getElementById('cacheSize').value),
+        workloadPatterns: patterns,
+        iterations: parseInt(document.getElementById('iterations').value),
+        keySpaceSize: parseInt(document.getElementById('keySpaceSize').value),
+        readWriteRatio: parseFloat(document.getElementById('readWriteRatio').value)
+    };
+
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    updateProgress(10, 'Sending simulation request...');
+
+    let url = '/api/cache/benchmark/simulate';
+    if (mode === 'concurrent') url += '/concurrent?threads=4';
+    else if (mode === 'async') url += '/async';
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+
+        updateProgress(80, 'Processing results...');
+        const data = await res.json();
+        updateProgress(100, 'Complete!');
+        setTimeout(() => document.getElementById('progressContainer').classList.remove('active'), 1500);
+        renderResults(data);
+    } catch (err) {
+        updateProgress(0, '❌ Error: ' + err.message);
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// Render
+function renderResults(data) {
+    document.getElementById('chartsSection').style.display = 'grid';
+    document.getElementById('tableSection').style.display = 'block';
+
+    const labels = Object.keys(data);
+    const hitRates = labels.map(k => parseFloat(data[k]['Hit Rate']?.replace('%','')) || 0);
+    const latencies = labels.map(k => parseFloat(data[k]['Average Latency (ms/op)']) || 0);
+    const evictions = labels.map(k => data[k]['Eviction Count'] || 0);
+    const hits = labels.map(k => data[k]['Hit Count'] || 0);
+    const misses = labels.map(k => data[k]['Miss Count'] || 0);
+    const colors = labels.map((_, i) => COLORS[i % COLORS.length]);
+
+    const chartDefaults = {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(17,24,39,0.95)',
+                titleFont: { family: 'Inter' },
+                bodyFont: { family: 'Inter' },
+                borderColor: 'rgba(99,102,241,0.3)',
+                borderWidth: 1,
+                cornerRadius: 8,
+                padding: 12,
+            }
+        },
+        scales: {
+            x: {
+                ticks: { color: '#64748b', font: { size: 10, family: 'Inter' }, maxRotation: 45 },
+                grid: { color: 'rgba(255,255,255,0.03)' }
+            },
+            y: {
+                ticks: { color: '#64748b', font: { size: 10, family: 'Inter' } },
+                grid: { color: 'rgba(255,255,255,0.03)' }
+            }
+        }
+    };
+
+    // Destroy old charts
+    Object.values(charts).forEach(c => c.destroy());
+
+    charts.hitRate = new Chart(document.getElementById('hitRateChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Hit Rate %', data: hitRates, backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1, borderRadius: 6 }] },
+        options: { ...chartDefaults, scales: { ...chartDefaults.scales, y: { ...chartDefaults.scales.y, beginAtZero: true, max: 100 } } }
+    });
+
+    charts.latency = new Chart(document.getElementById('latencyChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Avg Latency', data: latencies, backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1, borderRadius: 6 }] },
+        options: chartDefaults
+    });
+
+    charts.eviction = new Chart(document.getElementById('evictionChart'), {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Evictions', data: evictions, backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 1, borderRadius: 6 }] },
+        options: chartDefaults
+    });
+
+    charts.hitMiss = new Chart(document.getElementById('hitMissChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Hits', data: hits, backgroundColor: '#10b98199', borderColor: '#10b981', borderWidth: 1, borderRadius: 6 },
+                { label: 'Misses', data: misses, backgroundColor: '#ef444499', borderColor: '#ef4444', borderWidth: 1, borderRadius: 6 }
+            ]
+        },
+        options: { ...chartDefaults, plugins: { ...chartDefaults.plugins, legend: { display: true, labels: { color: '#94a3b8', font: { family: 'Inter' } } } } }
+    });
+
+    // Table
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = '';
+    labels.forEach(key => {
+        const d = data[key];
+        const [pattern, strategy] = key.split('-');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><span class="badge badge-pattern">${pattern}</span></td>
+            <td><span class="badge badge-strategy">${strategy}</span></td>
+            <td>${d['Capacity']}</td>
+            <td>${d['Final Size']}</td>
+            <td>${d['Hit Count']}</td>
+            <td>${d['Miss Count']}</td>
+            <td><strong>${d['Hit Rate']}</strong></td>
+            <td>${d['Eviction Count']}</td>
+            <td>${d['Average Latency (ms/op)']}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+// Init
+initCheckboxes();
+connectWebSocket();
+</script>
+</body>
+</html>

@@ -41,4 +41,16 @@ public class CacheBenchmarkController {
         SimulationRequest allRequest = new SimulationRequest(strategy, params);
         return simulatorService.runSimulation(allRequest);
     }
+
+    @PostMapping("/simulate/concurrent")
+    public Map<String, Object> simulateConcurrentBenchmark(
+            @RequestBody SimulationRequest simulationRequest,
+            @RequestParam(defaultValue = "4") int threads) {
+        return simulatorService.runConcurrentSimulation(simulationRequest, threads);
+    }
+
+    @PostMapping("/simulate/async")
+    public Map<String, Object> simulateAsyncBenchmark(@RequestBody SimulationRequest simulationRequest) {
+        return simulatorService.runSimulationAsync(simulationRequest);
+    }
 }

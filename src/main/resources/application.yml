@@ -6,7 +6,7 @@ server:
 
 springdoc:
   swagger-ui:
-    path: /
+    path: /swagger
 
 management:
   endpoints:

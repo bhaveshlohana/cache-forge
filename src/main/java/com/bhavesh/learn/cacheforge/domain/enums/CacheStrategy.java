@@ -6,5 +6,7 @@ public enum CacheStrategy {
     FIFO,
     MRU,
     TTL_LRU,
-    RANDOM
+    RANDOM,
+    ARC,
+    CLOCK
 }
