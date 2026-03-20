@@ -7,6 +7,7 @@ server:
 springdoc:
   swagger-ui:
     path: /swagger
+  default-flat-param-object: false
 
 management:
   endpoints:
@@ -30,3 +31,14 @@ simulation:
   progress:
     percent-step: 5    # send every 5% progress
     count-step: 1000   # OR send every 1000 iterations
+
+rate-limiter:
+  configs:
+    - clientType: DEFAULT
+      algorithm: FIXED_WINDOW
+      limit: 5
+      windowSizeSeconds: 60
+    - clientType: PREMIUM
+      algorithm: TOKEN_BUCKET
+      capacity: 20
+      refillRatePerSecond: 2.0
